@@ -1,0 +1,12 @@
+# Never upload your token to GitHub — it lives in an Actions *secret* instead.
+.env
+
+# Python cruft
+__pycache__/
+*.pyc
+
+# Optional downloaded coin-name cache (rebuilt automatically)
+coins_cache.json
+
+# NOTE: state.json is intentionally NOT ignored — the GitHub Actions workflow
+# commits it back each run so the bot remembers what it has already seen.
