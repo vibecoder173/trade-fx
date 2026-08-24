@@ -1,0 +1,57 @@
+name: crypto-bot
+
+# WHAT THIS DOES
+# Runs the bot on GitHub's free servers on a schedule, so it works 24/7 without
+# any computer of yours being on. Each run checks your messages, runs the radar,
+# and pushes alerts — then saves what it has seen back to state.json.
+
+on:
+  schedule:
+    # Every 5 minutes (times are UTC). GitHub can delay scheduled runs when it's
+    # busy, so treat this as "about every 5–15 minutes".
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}   # also lets you run it by hand from the Actions tab
+
+# Never let two runs overlap (they'd fight over saving state).
+concurrency:
+  group: crypto-bot
+  cancel-in-progress: false
+
+# Allow the run to commit the updated state.json back to the repo.
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run one bot cycle
+        env:
+          # This pulls your token from the encrypted GitHub secret. The token is
+          # NOT in the code — you add it under Settings → Secrets → Actions.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: python run_once.py
+
+      - name: Save state back to the repo
+        run: |
+          git config user.name "crypto-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          if git diff --cached --quiet; then
+            echo "No state change — nothing to commit."
+          else
+            git commit -m "Update bot state [skip ci]"
+            git push
+          fi
