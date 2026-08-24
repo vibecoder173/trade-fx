@@ -108,6 +108,13 @@ def main() -> int:
         print("=" * 64)
         return 1
 
+    # Make sure Telegram suggests our commands in the "/" menu. This only calls
+    # the API the first time (or whenever the command list changes).
+    try:
+        bot.register_commands()
+    except Exception:
+        traceback.print_exc()
+
     started = time.time()
     print("run_once: draining commands…")
     n = drain_commands()

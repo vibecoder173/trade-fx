@@ -15,6 +15,7 @@ Design notes:
   * No trade is ever placed. The bot only informs and alerts.
 """
 
+import hashlib
 import html
 import json
 import threading
@@ -55,6 +56,7 @@ def _default_state():
         "seen_radar": [],
         "radar_seeded": False,
         "tracked_x": [],
+        "commands_sig": None,
     }
 
 
@@ -101,6 +103,60 @@ def broadcast(text):
         subs = list(STATE.get("subscribers", []))
     for chat_id in subs:
         send_message(chat_id, text)
+
+
+# ---------------------------------------------------------------------------
+# Telegram "/" command menu (so the app suggests commands as you type)
+# ---------------------------------------------------------------------------
+# (command, description) — command must be lowercase; description is the short
+# help text Telegram shows beside each one in the "/" popup.
+BOT_COMMANDS = [
+    ("start", "Start the bot & show the menu"),
+    ("help", "Show every command & how it works"),
+    ("radar", "What's hot on the radar (/radar on|off)"),
+    ("sources", "Radar sources & whether each is live"),
+    ("price", "Price & 24h stats — e.g. /price btc"),
+    ("analyze", "Full analysis + trade plan — /analyze btc"),
+    ("signal", "Same as analyze — /signal btc"),
+    ("risk", "Position size — /risk 42000 41000"),
+    ("scan", "Scan your watchlist for the best setups"),
+    ("news", "Latest market-moving headlines"),
+    ("track", "Watch an X handle — /track elonmusk"),
+    ("untrack", "Stop watching an X handle"),
+    ("watch", "Add coins — /watch sol avax"),
+    ("unwatch", "Remove a coin — /unwatch sol"),
+    ("watchlist", "Show your watched coins"),
+    ("alerts", "Auto signal & news alerts (on|off)"),
+    ("settings", "Show or change your settings"),
+]
+
+
+def register_commands(force=False):
+    """Tell Telegram our command list so it autocompletes when you tap '/'.
+
+    Telegram only needs this set once, so we remember a signature in state and
+    only call the API again if the list actually changes — that way the 5-minute
+    scheduled runs don't spam the API or churn state.json.
+    """
+    sig = hashlib.sha1(json.dumps(BOT_COMMANDS).encode("utf-8")).hexdigest()
+    with _STATE_LOCK:
+        if not force and STATE.get("commands_sig") == sig:
+            return False
+    payload = {"commands": [{"command": c, "description": d} for c, d in BOT_COMMANDS]}
+    try:
+        r = requests.post(API + "setMyCommands", json=payload, timeout=15)
+        ok = bool(r.json().get("ok"))
+    except Exception as e:
+        print("setMyCommands failed:", e)
+        return False
+    if ok:
+        with _STATE_LOCK:
+            STATE["commands_sig"] = sig
+            save_state(STATE)
+        print(f"Registered {len(BOT_COMMANDS)} commands with Telegram.")
+    else:
+        print("setMyCommands returned not-ok.")
+    return ok
 
 
 def esc(s):
@@ -757,6 +813,9 @@ def main():
         return
 
     print("Crypto Trade Assistant bot is running. Press Ctrl+C to stop.")
+
+    # Tell Telegram our command list so the app autocompletes when you type "/".
+    register_commands()
 
     # Widen coin-name coverage from CoinGecko in the background (best-effort).
     def _warm_coins():
