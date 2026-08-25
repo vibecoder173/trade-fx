@@ -16,10 +16,15 @@
   ],
   "seen_news": [
     "bf198ca8-99d8-4e0b-a59d-982639aada64",
+    "https://bitcoinmagazine.com/?p=54308",
+    "https://bitcoinmagazine.com/?p=54311",
     "https://bitcoinmagazine.com/?p=54320",
     "https://bitcoinmagazine.com/?p=54327",
     "https://cointelegraph.com/markets/bitcoin-price-hits-80k-as-24-hour-crypto-short-liquidations-pass-m",
+    "https://cointelegraph.com/news/bitmine-eth-holdings-5-percent-ether-price-breakout",
     "https://cointelegraph.com/news/cftc-us-soldier-polymarket-bet-prediction-market-regulations",
+    "https://cointelegraph.com/news/strive-buys-1110-bitcoin-for-815m-holdings-top-21k-btc",
+    "https://decrypt.co/?p=376336",
     "https://decrypt.co/?p=376349",
     "https://decrypt.co/?p=376393",
     "https://decrypt.co/?p=376394",
@@ -121,7 +126,10 @@
     "news:https://decrypt.co/?p=376416"
   ],
   "radar_seeded": true,
-  "tracked_x": [],
+  "tracked_x": [
+    "donaldtrump",
+    "realdonaldtrump"
+  ],
   "commands_sig": "615858bdb03136ccd5107389b0b4daacb6efba19",
-  "update_offset": 599484897
+  "update_offset": 599484902
 }
