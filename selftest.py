@@ -8,11 +8,12 @@ Offline + online verification of the bot's brains (no Telegram needed).
    (indicators -> patterns -> signal -> risk plan) so we know it works even if
    the network is blocked.
 3. If Binance is reachable, runs a live analysis on BTC as a bonus.
+
+Pure Python — no pandas/numpy needed. Run it with:  python selftest.py
 """
 
 import math
-import numpy as np
-import pandas as pd
+import random
 
 import indicators as ind
 import patterns as pat
@@ -24,42 +25,41 @@ def approx(a, b, tol=1e-6):
 
 
 def test_ema():
-    s = pd.Series([1, 2, 3, 4, 5], dtype=float)
+    s = [1.0, 2, 3, 4, 5]
     # EMA span=2 -> alpha=2/3. Compute expected iteratively.
     alpha = 2 / 3
     exp = [1.0]
     for x in [2, 3, 4, 5]:
         exp.append(alpha * x + (1 - alpha) * exp[-1])
-    got = ind.ema(s, 2).tolist()
+    got = ind.ema(s, 2)
     assert all(approx(g, e) for g, e in zip(got, exp)), (got, exp)
     print("  ema ....... OK")
 
 
 def test_rsi_all_gains():
     # Strictly increasing closes -> RSI should be 100 (no losses).
-    s = pd.Series(range(1, 40), dtype=float)
-    r = ind.rsi(s, 14).iloc[-1]
+    s = [float(x) for x in range(1, 40)]
+    r = ind.rsi(s, 14)[-1]
     assert approx(r, 100.0, 1e-3), r
     print("  rsi ....... OK (all-gains -> 100)")
 
 
 def test_atr_positive():
     n = 60
-    df = pd.DataFrame({
-        "high": np.linspace(10, 20, n) + 0.5,
-        "low": np.linspace(10, 20, n) - 0.5,
-        "close": np.linspace(10, 20, n),
-    })
-    a = ind.atr(df, 14).iloc[-1]
+    high = [10 + 10 * i / (n - 1) + 0.5 for i in range(n)]
+    low = [10 + 10 * i / (n - 1) - 0.5 for i in range(n)]
+    close = [10 + 10 * i / (n - 1) for i in range(n)]
+    candles = {"high": high, "low": low, "close": close}
+    a = ind.atr(candles, 14)[-1]
     assert a > 0 and math.isfinite(a), a
     print("  atr ....... OK (positive, finite)")
 
 
 def test_bollinger_contains_mean():
-    s = pd.Series(np.random.RandomState(0).normal(100, 5, 100))
+    s = [100 + 5 * math.sin(i / 3.0) for i in range(100)]
     up, mid, low = ind.bollinger(s, 20, 2.0)
     i = 50
-    assert low.iloc[i] <= mid.iloc[i] <= up.iloc[i]
+    assert low[i] <= mid[i] <= up[i]
     print("  bollinger . OK (lower <= mid <= upper)")
 
 
@@ -89,26 +89,26 @@ def test_risk_engine():
 
 def make_synthetic(n=260, seed=7):
     """Trending-up series with noise, so trend/plan logic has something real."""
-    rng = np.random.RandomState(seed)
-    drift = np.linspace(0, 30, n)
-    noise = np.cumsum(rng.normal(0, 0.8, n))
-    close = 100 + drift + noise
-    high = close + rng.uniform(0.2, 1.2, n)
-    low = close - rng.uniform(0.2, 1.2, n)
-    openp = close - rng.normal(0, 0.5, n)
-    vol = rng.uniform(100, 500, n)
-    return pd.DataFrame({
-        "open_time": pd.date_range("2024-01-01", periods=n, freq="4h"),
-        "open": openp, "high": high, "low": low, "close": close, "volume": vol,
-    })
+    rng = random.Random(seed)
+    close, cum = [], 0.0
+    for i in range(n):
+        drift = 30.0 * i / (n - 1)
+        cum += rng.gauss(0, 0.8)
+        close.append(100.0 + drift + cum)
+    high = [close[i] + rng.uniform(0.2, 1.2) for i in range(n)]
+    low = [close[i] - rng.uniform(0.2, 1.2) for i in range(n)]
+    openp = [close[i] - rng.gauss(0, 0.5) for i in range(n)]
+    vol = [rng.uniform(100, 500) for _ in range(n)]
+    return {"open_time": list(range(n)), "open": openp, "high": high,
+            "low": low, "close": close, "volume": vol}
 
 
-def test_pipeline_offline(monkeypatch_target):
+def test_pipeline_offline(_unused=None):
     """Run analyze() end-to-end against synthetic data by patching data.get_klines."""
     import data as market
     synthetic = make_synthetic()
     orig = market.get_klines
-    market.get_klines = lambda *a, **k: synthetic.copy()
+    market.get_klines = lambda *a, **k: {k2: list(v) for k2, v in synthetic.items()}
     try:
         a = strategy.analyze("TEST", timeframe="4h", account=1000, risk_pct=1, rr=2)
     finally:
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     print("Risk engine:")
     test_risk_engine()
     print("Full pipeline (offline synthetic data):")
-    test_pipeline_offline(None)
+    test_pipeline_offline()
     print("Live data (bonus):")
     test_live()
-    print("\nALL CORE TESTS PASSED ✅")
+    print("\nALL CORE TESTS PASSED")

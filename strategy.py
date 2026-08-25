@@ -11,15 +11,20 @@ to line up with a direction. It is NOT a probability of profit and it is NOT a
 guarantee. Its real job is to stop you trading with no reason and to force every
 idea through a risk-managed plan (fixed % risk, defined stop, minimum R:R).
 Capital preservation first; being right second.
+
+Candles are a dict of equal-length lists (see indicators.py). No pandas/numpy.
 """
 
 import math
-import pandas as pd
 
 import config
 import data as market
 import indicators as ind
 import patterns as pat
+
+
+def _isnan(x):
+    return x is None or (isinstance(x, float) and math.isnan(x))
 
 
 # ----------------------------------------------------------------------------
@@ -86,12 +91,11 @@ def plan_trade(account: float, risk_pct: float, entry: float, sl: float,
 # ----------------------------------------------------------------------------
 # signal engine
 # ----------------------------------------------------------------------------
-def _score(df: pd.DataFrame, sr: dict, patterns, breakout):
+def _score(c: dict, sr: dict, patterns, breakout):
     """Build a bull/bear score with a plain-English rationale for each point."""
-    last = df.iloc[-1]
     bull, bear, rationale = 0, 0, []
 
-    trend = pat.detect_trend(df)
+    trend = pat.detect_trend(c)
     if trend == "uptrend":
         bull += 2; rationale.append("Uptrend: price above 200 EMA, 50 EMA rising")
     elif trend == "downtrend":
@@ -99,16 +103,19 @@ def _score(df: pd.DataFrame, sr: dict, patterns, breakout):
     else:
         rationale.append("No clear trend (range) - signals are lower confidence")
 
+    ema50, ema200 = c["ema50"][-1], c["ema200"][-1]
+    close = c["close"][-1]
+
     # Moving-average alignment
-    if not pd.isna(last["ema50"]) and not pd.isna(last["ema200"]):
-        if last["ema50"] > last["ema200"]:
+    if not _isnan(ema50) and not _isnan(ema200):
+        if ema50 > ema200:
             bull += 1; rationale.append("50 EMA above 200 EMA (bullish structure)")
         else:
             bear += 1; rationale.append("50 EMA below 200 EMA (bearish structure)")
 
     # RSI
-    rsi_val = last["rsi"]
-    if not pd.isna(rsi_val):
+    rsi_val = c["rsi"][-1]
+    if not _isnan(rsi_val):
         if rsi_val < 30:
             bull += 1; rationale.append(f"RSI {rsi_val:.0f} - oversold (bounce potential)")
         elif rsi_val > 70:
@@ -117,18 +124,19 @@ def _score(df: pd.DataFrame, sr: dict, patterns, breakout):
             rationale.append(f"RSI {rsi_val:.0f} - neutral")
 
     # MACD histogram
-    hist = last["macd_hist"]
-    if not pd.isna(hist):
+    hist = c["macd_hist"][-1]
+    if not _isnan(hist):
         if hist > 0:
             bull += 1; rationale.append("MACD histogram positive (upward momentum)")
         elif hist < 0:
             bear += 1; rationale.append("MACD histogram negative (downward momentum)")
 
     # Bollinger position (mean reversion)
-    if not pd.isna(last["bb_lower"]) and not pd.isna(last["bb_upper"]):
-        if last["close"] < last["bb_lower"]:
+    bb_lower, bb_upper = c["bb_lower"][-1], c["bb_upper"][-1]
+    if not _isnan(bb_lower) and not _isnan(bb_upper):
+        if close < bb_lower:
             bull += 1; rationale.append("Price below lower Bollinger Band (stretched down)")
-        elif last["close"] > last["bb_upper"]:
+        elif close > bb_upper:
             bear += 1; rationale.append("Price above upper Bollinger Band (stretched up)")
 
     # Candlestick patterns
@@ -177,17 +185,18 @@ def analyze(coin: str, timeframe: str = None,
     risk_pct = risk_pct or config.DEFAULT_RISK_PCT
     rr = rr or config.DEFAULT_RR
 
-    df = market.get_klines(coin, interval=timeframe)
-    df = ind.add_indicators(df)
-    sr = pat.support_resistance(df)
-    patterns = pat.candlestick_patterns(df)
-    breakout = pat.detect_breakout(df)
+    c = market.get_klines(coin, interval=timeframe)
+    c = ind.add_indicators(c)
+    sr = pat.support_resistance(c)
+    patterns = pat.candlestick_patterns(c)
+    breakout = pat.detect_breakout(c)
 
-    bull, bear, rationale, trend = _score(df, sr, patterns, breakout)
+    bull, bear, rationale, trend = _score(c, sr, patterns, breakout)
     net = bull - bear
-    last = df.iloc[-1]
-    price = float(last["close"])
-    atr_val = float(last["atr"]) if not pd.isna(last["atr"]) else price * 0.02
+    price = float(c["close"][-1])
+    atr_last = c["atr"][-1]
+    atr_val = float(atr_last) if not _isnan(atr_last) else price * 0.02
+    rsi_last = c["rsi"][-1]
 
     if net >= 2:
         direction = "LONG"
@@ -218,7 +227,7 @@ def analyze(coin: str, timeframe: str = None,
         "timeframe": timeframe,
         "price": price,
         "trend": trend,
-        "rsi": float(last["rsi"]) if not pd.isna(last["rsi"]) else None,
+        "rsi": float(rsi_last) if not _isnan(rsi_last) else None,
         "atr": atr_val,
         "support": sr.get("nearest_support"),
         "resistance": sr.get("nearest_resistance"),

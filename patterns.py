@@ -10,37 +10,48 @@ Reads chart *structure* from candle data:
 
 These are heuristics. They describe what the chart is doing right now; they do
 NOT predict the future. They feed the signal engine in strategy.py.
+
+Candles are a dict of equal-length lists (see indicators.py). No pandas/numpy.
 """
 
-import pandas as pd
+import math
 
 
-def find_swings(df: pd.DataFrame, left: int = 3, right: int = 3):
+def _isnan(x):
+    return x is None or (isinstance(x, float) and math.isnan(x))
+
+
+def _tail(candles, n):
+    """Return a new candle dict with only the last n rows of every column."""
+    return {k: v[-n:] for k, v in candles.items()}
+
+
+def find_swings(candles, left: int = 3, right: int = 3):
     """Return (swing_high_indices, swing_low_indices)."""
     highs, lows = [], []
-    h, l = df["high"].values, df["low"].values
-    n = len(df)
+    h, l = candles["high"], candles["low"]
+    n = len(h)
     for i in range(left, n - right):
         window_h = h[i - left:i + right + 1]
         window_l = l[i - left:i + right + 1]
-        if h[i] == window_h.max() and (window_h == h[i]).sum() == 1:
+        if h[i] == max(window_h) and sum(1 for x in window_h if x == h[i]) == 1:
             highs.append(i)
-        if l[i] == window_l.min() and (window_l == l[i]).sum() == 1:
+        if l[i] == min(window_l) and sum(1 for x in window_l if x == l[i]) == 1:
             lows.append(i)
     return highs, lows
 
 
-def support_resistance(df: pd.DataFrame, lookback: int = 150):
+def support_resistance(candles, lookback: int = 150):
     """
     Find the nearest support (below price) and resistance (above price)
     from recent swing points. Returns a dict; values may be None.
     """
-    recent = df.tail(lookback).reset_index(drop=True)
+    recent = _tail(candles, lookback)
     highs, lows = find_swings(recent)
-    price = float(recent["close"].iloc[-1])
+    price = float(recent["close"][-1])
 
-    swing_high_prices = [float(recent["high"].iloc[i]) for i in highs]
-    swing_low_prices = [float(recent["low"].iloc[i]) for i in lows]
+    swing_high_prices = [float(recent["high"][i]) for i in highs]
+    swing_low_prices = [float(recent["low"][i]) for i in lows]
 
     resistances = sorted(p for p in swing_high_prices if p > price)
     supports = sorted((p for p in swing_low_prices if p < price), reverse=True)
@@ -54,35 +65,42 @@ def support_resistance(df: pd.DataFrame, lookback: int = 150):
     }
 
 
-def detect_trend(df: pd.DataFrame) -> str:
+def detect_trend(candles) -> str:
     """Classify the trend using EMA alignment and slope."""
-    last = df.iloc[-1]
-    if any(pd.isna(last.get(c)) for c in ("ema50", "ema200")):
+    close = candles["close"]
+    ema50 = candles.get("ema50")
+    ema200 = candles.get("ema200")
+    if not close or ema50 is None or ema200 is None:
         return "unknown"
-    ema50_now = last["ema50"]
-    ema50_prev = df["ema50"].iloc[-10] if len(df) >= 10 else ema50_now
+    if _isnan(ema50[-1]) or _isnan(ema200[-1]):
+        return "unknown"
+
+    ema50_now = ema50[-1]
+    ema50_prev = ema50[-10] if len(ema50) >= 10 else ema50_now
     rising = ema50_now > ema50_prev
     falling = ema50_now < ema50_prev
 
-    if last["ema50"] > last["ema200"] and last["close"] > last["ema200"] and rising:
+    if ema50[-1] > ema200[-1] and close[-1] > ema200[-1] and rising:
         return "uptrend"
-    if last["ema50"] < last["ema200"] and last["close"] < last["ema200"] and falling:
+    if ema50[-1] < ema200[-1] and close[-1] < ema200[-1] and falling:
         return "downtrend"
     return "range"
 
 
-def candlestick_patterns(df: pd.DataFrame):
+def candlestick_patterns(candles):
     """
     Inspect the most recent candle(s). Returns a list of (name, bias) tuples,
     bias in {"bullish", "bearish", "neutral"}.
     """
     out = []
-    if len(df) < 2:
+    close = candles["close"]
+    if len(close) < 2:
         return out
-    c = df.iloc[-1]
-    p = df.iloc[-2]
 
-    o, cl, hi, lo = c["open"], c["close"], c["high"], c["low"]
+    o, cl = candles["open"][-1], close[-1]
+    hi, lo = candles["high"][-1], candles["low"][-1]
+    prev_o, prev_cl = candles["open"][-2], close[-2]
+
     body = abs(cl - o)
     rng = hi - lo
     if rng <= 0:
@@ -103,19 +121,19 @@ def candlestick_patterns(df: pd.DataFrame):
         out.append(("Shooting Star", "bearish"))
 
     # Engulfing - momentum reversal (compare with previous candle body)
-    p_bull = p["close"] > p["open"]
-    p_bear = p["close"] < p["open"]
+    p_bull = prev_cl > prev_o
+    p_bear = prev_cl < prev_o
     c_bull = cl > o
     c_bear = cl < o
-    if c_bull and p_bear and cl >= p["open"] and o <= p["close"]:
+    if c_bull and p_bear and cl >= prev_o and o <= prev_cl:
         out.append(("Bullish Engulfing", "bullish"))
-    if c_bear and p_bull and o >= p["close"] and cl <= p["open"]:
+    if c_bear and p_bull and o >= prev_cl and cl <= prev_o:
         out.append(("Bearish Engulfing", "bearish"))
 
     return out
 
 
-def detect_breakout(df: pd.DataFrame, lookback: int = 150):
+def detect_breakout(candles, lookback: int = 150):
     """
     Detect a fresh breakout/breakdown on the latest candle: did price close
     across a prior swing level this candle? Returns "breakout_up",
@@ -125,14 +143,15 @@ def detect_breakout(df: pd.DataFrame, lookback: int = 150):
     nearest S/R), because the instant price breaks a resistance that level would
     otherwise be re-classified as support and the check would never fire.
     """
-    if len(df) < 12:
+    close = candles["close"]
+    if len(close) < 12:
         return None
-    recent = df.tail(lookback).reset_index(drop=True)
+    recent = _tail(candles, lookback)
     highs, lows = find_swings(recent)
-    res_levels = [float(recent["high"].iloc[i]) for i in highs]
-    sup_levels = [float(recent["low"].iloc[i]) for i in lows]
-    last_close = float(df["close"].iloc[-1])
-    prev_close = float(df["close"].iloc[-2])
+    res_levels = [float(recent["high"][i]) for i in highs]
+    sup_levels = [float(recent["low"][i]) for i in lows]
+    last_close = float(close[-1])
+    prev_close = float(close[-2])
     for r in res_levels:
         if prev_close <= r < last_close:
             return "breakout_up"

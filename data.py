@@ -3,11 +3,16 @@ data.py
 -------
 Fetches live market data from Binance's public REST API.
 No API key or account is required for this read-only market data.
+
+Candles are returned as a plain dict of equal-length lists (columns) so the rest
+of the bot needs no pandas/numpy:
+    {"open_time": [...ms...], "open": [...], "high": [...], "low": [...],
+     "close": [...], "volume": [...]}
 """
 
+import math
 import time
 import requests
-import pandas as pd
 
 import config
 
@@ -69,10 +74,11 @@ def _get(path: str, params: dict, retries: int = 2):
 
 def get_klines(coin: str,
                interval: str = None,
-               limit: int = None) -> pd.DataFrame:
+               limit: int = None) -> dict:
     """
-    Return a DataFrame of OHLCV candles, oldest first.
-    Columns: open_time (datetime), open, high, low, close, volume (floats).
+    Return OHLCV candles, oldest first, as a dict of lists.
+    Columns: open_time (ms int), open, high, low, close, volume (floats).
+    Rows with unparseable/NaN values are dropped (like the old dropna()).
     """
     interval = interval or config.DEFAULT_TIMEFRAME
     limit = limit or config.CANDLE_LIMIT
@@ -82,16 +88,25 @@ def get_klines(coin: str,
     if not raw:
         raise ValueError(f"No candle data returned for {symbol}.")
 
-    df = pd.DataFrame(raw, columns=[
-        "open_time", "open", "high", "low", "close", "volume",
-        "close_time", "qav", "trades", "tbav", "tqav", "ignore",
-    ])
-    df = df[["open_time", "open", "high", "low", "close", "volume"]].copy()
-    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
-    for col in ["open", "high", "low", "close", "volume"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.dropna().reset_index(drop=True)
-    return df
+    candles = {"open_time": [], "open": [], "high": [], "low": [],
+               "close": [], "volume": []}
+    for row in raw:
+        # Binance kline row: [openTime, open, high, low, close, volume, ...]
+        try:
+            o = float(row[1]); h = float(row[2]); l = float(row[3])
+            c = float(row[4]); v = float(row[5])
+            ot = int(row[0])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if any(math.isnan(x) for x in (o, h, l, c, v)):
+            continue
+        candles["open_time"].append(ot)
+        candles["open"].append(o)
+        candles["high"].append(h)
+        candles["low"].append(l)
+        candles["close"].append(c)
+        candles["volume"].append(v)
+    return candles
 
 
 def get_price(coin: str) -> float:
