@@ -17,6 +17,7 @@
   "seen_news": [
     "18b6c378-7b20-42b4-8db2-9211306ca3b2",
     "47b72333-89da-490c-a383-cc330e2ca3b5",
+    "6a8be34e-acbc-4968-9462-7074c8ffb4ac",
     "88806d32-73ab-4736-b443-5569af459e93",
     "8df9bb97-10e5-4c26-a33b-afe54e2dd430",
     "bf198ca8-99d8-4e0b-a59d-982639aada64",
@@ -31,6 +32,7 @@
     "https://cointelegraph.com/news/bitmine-eth-holdings-5-percent-ether-price-breakout",
     "https://cointelegraph.com/news/bnb-chain-pasteur-hard-fork-bridge-security",
     "https://cointelegraph.com/news/cftc-us-soldier-polymarket-bet-prediction-market-regulations",
+    "https://cointelegraph.com/news/coldcard-hack-galaxy-btc-lost-87-unmoved",
     "https://cointelegraph.com/news/strive-buys-1110-bitcoin-for-815m-holdings-top-21k-btc",
     "https://cointelegraph.com/news/us-targets-iran-crypto-sector-100m-oil-payments",
     "https://decrypt.co/?p=376336",
@@ -40,7 +42,9 @@
     "https://decrypt.co/?p=376415",
     "https://decrypt.co/?p=376416"
   ],
-  "last_signal": {},
+  "last_signal": {
+    "SOLUSDT": 4
+  },
   "radar_on": true,
   "seen_radar": [
     "binance_listing:0872245db74c4daaabd4f11984ba52c1",
@@ -81,6 +85,7 @@
     "news:821e8318-0f93-425f-be77-01ff16b33890",
     "news:88806d32-73ab-4736-b443-5569af459e93",
     "news:8df9bb97-10e5-4c26-a33b-afe54e2dd430",
+    "news:91785806-d6bf-454b-b469-290dbab9b91b",
     "news:9ea4692b-a1e2-43af-be6b-15c8c9502252",
     "news:a04f75dd-f5a8-493c-ab74-be97f01812a3",
     "news:b4cc568f-9f8a-4453-bef2-0e728efcae52",
@@ -113,9 +118,11 @@
     "news:https://cointelegraph.com/news/bernstein-circle-usdc-growth-140-price-target",
     "news:https://cointelegraph.com/news/bitmine-eth-holdings-5-percent-ether-price-breakout",
     "news:https://cointelegraph.com/news/bnb-chain-pasteur-hard-fork-bridge-security",
+    "news:https://cointelegraph.com/news/business-owner-280-years-24m-crypto-ponzi-scheme",
     "news:https://cointelegraph.com/news/cftc-us-soldier-polymarket-bet-prediction-market-regulations",
     "news:https://cointelegraph.com/news/coinbase-stand-crypto-advocacy-group-endorses-midterm-candidates",
     "news:https://cointelegraph.com/news/coinbase-taps-chainlink-for-tokenized-stock-data-on-base",
+    "news:https://cointelegraph.com/news/coldcard-hack-galaxy-btc-lost-87-unmoved",
     "news:https://cointelegraph.com/news/cryptocurrency-organizations-oppose-illinois-digital-asset-tax-court",
     "news:https://cointelegraph.com/news/ecb-digital-euro-privacy-cbdcs-global-scrutiny",
     "news:https://cointelegraph.com/news/gemini-plans-to-distribute-crypto-prediction-markets-through-apex-brokerages",
@@ -146,7 +153,8 @@
     "news:https://decrypt.co/?p=376394",
     "news:https://decrypt.co/?p=376396",
     "news:https://decrypt.co/?p=376415",
-    "news:https://decrypt.co/?p=376416"
+    "news:https://decrypt.co/?p=376416",
+    "news:https://decrypt.co/?p=376422"
   ],
   "radar_seeded": true,
   "tracked_x": [
