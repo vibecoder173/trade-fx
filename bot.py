@@ -226,16 +226,25 @@ def format_analysis(a):
             lines.append(f"⚠️ Needs ~{p['leverage']:.1f}x leverage — "
                          f"or lower your risk% / widen nothing and reduce size.")
     lines.append(f"\n{config.DISCLAIMER}")
+    if a.get("source"):
+        lines.append(f"<i>Chart data via {esc(a['source'])}</i>")
     return "\n".join(lines)
 
 
 def format_price(stats):
     fp = strategy.fmt_price
     arrow = "🟢" if stats["change_pct"] >= 0 else "🔴"
-    return (f"<b>{esc(stats['symbol'])}</b> {arrow}\n"
-            f"Price: <b>{fp(stats['last'])}</b>  ({stats['change_pct']:+.2f}% 24h)\n"
-            f"24h High: {fp(stats['high'])}\n"
-            f"24h Low:  {fp(stats['low'])}")
+    lines = [f"<b>{esc(stats['symbol'])}</b> {arrow}",
+             f"Price: <b>{fp(stats['last'])}</b>  ({stats['change_pct']:+.2f}% 24h)",
+             f"24h High: {fp(stats['high'])}",
+             f"24h Low:  {fp(stats['low'])}"]
+    src = stats.get("source")
+    if src:
+        lines.append(f"<i>via {esc(src)}</i>")
+    if src == "CoinGecko":
+        lines.append("<i>⚠️ Not on a major exchange we track — thin/less liquid. "
+                     "Price only; a reliable trade plan needs exchange chart data.</i>")
+    return "\n".join(lines)
 
 
 def format_risk(p, coin=None):
@@ -396,6 +405,19 @@ def cmd_analyze(chat_id, args):
         a = strategy.analyze(coin, timeframe=tf,
                              account=s["account"], risk_pct=s["risk_pct"], rr=s["rr"])
         send_message(chat_id, format_analysis(a))
+    except market.DataUnavailable:
+        # No exchange has candles for this coin — be honest, but still try to
+        # give the user its price (CoinGecko catch-all) instead of a dead end.
+        try:
+            st = market.get_24h_stats(coin)
+            send_message(chat_id,
+                f"⚠️ I can’t build a reliable trade plan for <b>{esc(coin.upper())}</b> — "
+                f"it doesn’t trade on any major exchange I track, so there’s no solid "
+                f"chart data to analyze. Here’s its price instead:\n\n" + format_price(st))
+        except Exception:
+            send_message(chat_id,
+                f"Couldn’t find <b>{esc(coin.upper())}</b> on any exchange or price "
+                f"source. Double-check the ticker?")
     except Exception as e:
         send_message(chat_id, f"Couldn't analyze {esc(coin)}: {esc(e)}")
 
@@ -661,6 +683,8 @@ def dispatch(update):
     parts = text.split()
     cmd = parts[0].lstrip("/").split("@")[0].lower()
     args = parts[1:]
+    # Visible heartbeat in the Termux log so you can SEE each command land.
+    print(f"> got: /{cmd} {' '.join(args)}".rstrip(), flush=True)
     handler = HANDLERS.get(cmd)
     if handler:
         try:
@@ -828,6 +852,7 @@ def main():
     threading.Thread(target=scanner_loop, daemon=True).start()
 
     offset = None
+    conflict_warned = False
     while True:
         try:
             r = requests.get(API + "getUpdates",
@@ -835,11 +860,34 @@ def main():
                              timeout=60)
             data_json = r.json()
             if not data_json.get("ok"):
+                # 409 = ANOTHER copy of this bot is polling the same token.
+                # That is the #1 cause of "slow / commands randomly do nothing":
+                # Telegram splits your messages between the two copies.
+                if data_json.get("error_code") == 409:
+                    if not conflict_warned:
+                        print("!" * 64)
+                        print(" CONFLICT (409): another copy of this bot is already running")
+                        print(" on this same token. This makes commands slow & unreliable.")
+                        print(" Telegram says:", data_json.get("description"))
+                        print(" Close the OTHER copy so ONLY this one runs:")
+                        print("   • the old Windows PC bot (start-bot.bat / a python window)")
+                        print("   • a second Termux session/tab")
+                        print("   • the GitHub Actions workflow (must be Disabled)")
+                        print("!" * 64, flush=True)
+                        conflict_warned = True
+                else:
+                    print("getUpdates not ok:", data_json.get("description"), flush=True)
                 time.sleep(3)
                 continue
+            if conflict_warned:
+                print("Conflict cleared — this is now the only bot. ✅", flush=True)
+                conflict_warned = False
             for update in data_json["result"]:
                 offset = update["update_id"] + 1
-                dispatch(update)
+                # Handle each command in its own thread, so a slow command
+                # (e.g. /analyze fetching data) never delays the next one.
+                # Replies stay instant even under load.
+                threading.Thread(target=dispatch, args=(update,), daemon=True).start()
         except requests.RequestException:
             time.sleep(3)
         except KeyboardInterrupt:

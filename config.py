@@ -46,6 +46,18 @@ BINANCE_HOSTS = [
     "https://data-api.binance.vision",
 ]
 
+# --- Multi-exchange coverage ---------------------------------------------
+# The bot no longer depends on Binance alone. For any coin, it tries these
+# exchanges IN ORDER until one has the pair, so you can reach almost anything.
+# Leave as-is for widest coverage, or trim to just the ones you trust.
+# Valid labels: Binance, Bybit, OKX, KuCoin, MEXC, Gate.io
+EXCHANGES = ["Binance", "Bybit", "OKX", "KuCoin", "MEXC", "Gate.io"]
+# If none of the above has the coin, fall back to CoinGecko for a PRICE ONLY
+# (covers ~every token incl. small-caps/DEX). Chart analysis still needs an
+# exchange — we won't fake a trade plan on a coin that trades nowhere we track.
+COINGECKO_PRICE_FALLBACK = True
+
+
 # Coins the bot watches for automatic alerts (symbols WITHOUT the quote).
 DEFAULT_WATCHLIST = ["BTC", "ETH", "SOL"]
 
