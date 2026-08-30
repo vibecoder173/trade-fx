@@ -32,6 +32,7 @@ import news as news_mod
 import data as market
 import radar
 import nlp
+import backtest
 
 API = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/"
 _LOCK = threading.Lock()  # serializes read-modify-write ops within this process
@@ -255,6 +256,7 @@ BOT_COMMANDS = [
     ("watchlist", "Show your watched coins"),
     ("alerts", "Auto signal & news alerts (on|off)"),
     ("settings", "Show or change your settings"),
+    ("backtest", "Test the strategy on history — /backtest btc"),
 ]
 
 
@@ -758,6 +760,25 @@ def cmd_sources(chat_id, args):
     lines.append("\nToggle with /radar on|off · add people with /track &lt;handle&gt;")
     send_message(chat_id, "\n".join(lines))
 
+def cmd_backtest(chat_id, args):
+    if not args:
+        return send_message(chat_id, "Usage: /backtest btc [timeframe]  (e.g. /backtest eth 1h)")
+    coin = args[0]
+    u = get_user(chat_id)
+    s = u["settings"]
+    tf = args[1] if len(args) > 1 else s["timeframe"]
+    try:
+        send_message(chat_id, f"\U0001F4CA Backtesting {esc(coin.upper())} on {esc(tf)}\u2026 this can take a moment.")
+        result = backtest.run_backtest(coin, timeframe=tf, account=s["account"],
+                                       risk_pct=s["risk_pct"], rr=s["rr"])
+        send_message(chat_id, backtest.format_backtest(result))
+    except market.DataUnavailable as e:
+        send_message(chat_id, f"\u26A0\uFE0F {esc(e)}")
+    except ValueError as e:
+        send_message(chat_id, f"\u26A0\uFE0F {esc(e)}")
+    except Exception as e:
+        send_message(chat_id, f"Backtest failed: {esc(e)}")
+
 
 def cmd_help(chat_id, args):
     send_message(chat_id, HELP)
@@ -773,6 +794,7 @@ HANDLERS = {
     "scan": cmd_scan,
     "radar": cmd_radar, "track": cmd_track, "untrack": cmd_untrack,
     "sources": cmd_sources,
+    "backtest": cmd_backtest,
 }
 
 
