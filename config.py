@@ -152,3 +152,6 @@ DISCLAIMER = (
 
 # Minimum ADX to treat a trend as strong enough to fully trust (else discounted)
 ADX_TREND_THRESHOLD = 20
+
+VOLUME_SPIKE_MULT = 1.5
+MAX_RISK_PCT = 3.0

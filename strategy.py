@@ -172,6 +172,17 @@ def _score(c: dict, sr: dict, patterns, breakout):
         elif close > bb_upper:
             bear += 1; rationale.append("Price above upper Bollinger Band (stretched up)")
 
+    # Volume confirmation - a move on unusually high volume carries more weight
+    vol, vol_avg = c["volume"][-1], c["vol_sma20"][-1]
+    open_ = c["open"][-1]
+    spike_mult = getattr(config, "VOLUME_SPIKE_MULT", 1.5)
+    if not _isnan(vol_avg) and vol_avg > 0 and vol > spike_mult * vol_avg:
+        ratio = vol / vol_avg
+        if close > open_:
+            bull += 1; rationale.append(f"Volume spike ({ratio:.1f}x avg) on an up candle - real buying pressure")
+        elif close < open_:
+            bear += 1; rationale.append(f"Volume spike ({ratio:.1f}x avg) on a down candle - real selling pressure")
+
     # Candlestick patterns
     for name, bias in patterns:
         if bias == "bullish":
@@ -254,19 +265,24 @@ def analyze(coin: str, timeframe: str = None,
         direction = "NEUTRAL"
 
     plan = None
+    strength_mult = {"strong": 1.5, "moderate": 1.15, "weak": 0.75}.get(_strength_label(net), 1.0)
+    max_risk = getattr(config, "MAX_RISK_PCT", risk_pct * 2)
+    scaled_risk_pct = min(risk_pct * strength_mult, max_risk)
     if direction == "LONG":
         atr_sl = price - config.ATR_SL_MULT * atr_val
         struct_sl = (sr["nearest_support"] * 0.998
                      if sr.get("nearest_support") else None)
         sl = min(atr_sl, struct_sl) if struct_sl else atr_sl
-        plan = plan_trade(account, risk_pct, price, sl, rr)
+        plan = plan_trade(account, scaled_risk_pct, price, sl, rr)
+        plan["base_risk_pct"] = risk_pct
         plan["resistance_cap"] = sr.get("nearest_resistance")
     elif direction == "SHORT":
         atr_sl = price + config.ATR_SL_MULT * atr_val
         struct_sl = (sr["nearest_resistance"] * 1.002
                      if sr.get("nearest_resistance") else None)
         sl = max(atr_sl, struct_sl) if struct_sl else atr_sl
-        plan = plan_trade(account, risk_pct, price, sl, rr)
+        plan = plan_trade(account, scaled_risk_pct, price, sl, rr)
+        plan["base_risk_pct"] = risk_pct
         plan["support_cap"] = sr.get("nearest_support")
 
     return {
