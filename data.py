@@ -71,7 +71,7 @@ def _norm_tf(interval):
 
 def _split(coin):
     """Turn 'btc' / 'BTC/USDT' / 'ethusdc' into (BASE, QUOTE). Default quote USDT."""
-    s = str(coin).upper().replace("/", "").replace("-", "").replace("_", "").strip()
+    s = str(coin).upper().replace("$", "").replace("/", "").replace("-", "").replace("_", "").strip()
     for q in ("USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD"):
         if s.endswith(q) and len(s) > len(q):
             return s[:-len(q)], q
