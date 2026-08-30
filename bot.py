@@ -324,7 +324,7 @@ def format_analysis(a):
                      f"— score {sign}{a['score']}")
 
     if a["rationale"]:
-        why = "\n".join(f"• {esc(r)}" for r in a["rationale"][:6])
+        why = "\n".join(f"• {esc(r)}" for r in a["rationale"][:8])
         lines.append(f"<i>Why:</i>\n{why}")
 
     p = a["plan"]
