@@ -27,6 +27,26 @@ def _isnan(x):
     return x is None or (isinstance(x, float) and math.isnan(x))
 
 
+_HTF_MAP = {
+    "1m": "1h", "3m": "1h", "5m": "4h", "15m": "4h", "30m": "4h",
+    "1h": "4h", "2h": "1d", "4h": "1d", "6h": "1d", "12h": "1d", "1d": "1w",
+}
+
+
+def _htf_trend(coin, timeframe):
+    """Lightweight trend check on the next timeframe up, for confluence.
+    Returns (trend, higher_timeframe_label) or (None, None) if unavailable."""
+    htf = _HTF_MAP.get(timeframe)
+    if not htf:
+        return None, None
+    try:
+        c = market.get_klines(coin, interval=htf, limit=220)
+        c = ind.add_indicators(c)
+        return pat.detect_trend(c), htf
+    except Exception:
+        return None, None
+
+
 # ----------------------------------------------------------------------------
 # formatting helpers
 # ----------------------------------------------------------------------------
@@ -96,10 +116,23 @@ def _score(c: dict, sr: dict, patterns, breakout):
     bull, bear, rationale = 0, 0, []
 
     trend = pat.detect_trend(c)
+    adx_val = c["adx"][-1]
+    adx_threshold = getattr(config, "ADX_TREND_THRESHOLD", 20)
+    strong_trend = (not _isnan(adx_val)) and adx_val >= adx_threshold
     if trend == "uptrend":
-        bull += 2; rationale.append("Uptrend: price above 200 EMA, 50 EMA rising")
+        pts = 2 if strong_trend else 1
+        bull += pts
+        note = "Uptrend: price above 200 EMA, 50 EMA rising"
+        if not strong_trend:
+            note += f" (ADX {adx_val:.0f} < {adx_threshold} - weak/choppy, discounted)"
+        rationale.append(note)
     elif trend == "downtrend":
-        bear += 2; rationale.append("Downtrend: price below 200 EMA, 50 EMA falling")
+        pts = 2 if strong_trend else 1
+        bear += pts
+        note = "Downtrend: price below 200 EMA, 50 EMA falling"
+        if not strong_trend:
+            note += f" (ADX {adx_val:.0f} < {adx_threshold} - weak/choppy, discounted)"
+        rationale.append(note)
     else:
         rationale.append("No clear trend (range) - signals are lower confidence")
 
@@ -192,6 +225,21 @@ def analyze(coin: str, timeframe: str = None,
     breakout = pat.detect_breakout(c)
 
     bull, bear, rationale, trend = _score(c, sr, patterns, breakout)
+
+    base_net = bull - bear
+    htf_trend, htf_label = _htf_trend(coin, timeframe)
+    if htf_trend and htf_label:
+        if htf_trend == "uptrend" and base_net > 0:
+            bull += 2; rationale.append(f"Higher timeframe ({htf_label}) confirms uptrend - confluence")
+        elif htf_trend == "downtrend" and base_net < 0:
+            bear += 2; rationale.append(f"Higher timeframe ({htf_label}) confirms downtrend - confluence")
+        elif htf_trend == "uptrend" and base_net < 0:
+            bear = max(0, bear - 2); rationale.append(f"Higher timeframe ({htf_label}) is uptrend - fighting the bigger trend, lower conviction")
+        elif htf_trend == "downtrend" and base_net > 0:
+            bull = max(0, bull - 2); rationale.append(f"Higher timeframe ({htf_label}) is downtrend - fighting the bigger trend, lower conviction")
+        elif htf_trend == "range":
+            rationale.append(f"Higher timeframe ({htf_label}) is ranging - no extra confluence")
+
     net = bull - bear
     price = float(c["close"][-1])
     atr_last = c["atr"][-1]
@@ -236,6 +284,8 @@ def analyze(coin: str, timeframe: str = None,
         "breakout": breakout,
         "bull": bull,
         "bear": bear,
+        "htf_trend": htf_trend,
+        "htf_timeframe": htf_label,
         "score": net,
         "direction": direction,
         "strength": _strength_label(net),

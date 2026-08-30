@@ -165,6 +165,43 @@ def bollinger(close, period=20, mult=2.0):
     return upper, mid, lower
 
 
+def adx(candles, period=14):
+    """Average Directional Index (Wilder). Returns (adx, plus_di, minus_di).
+    ADX measures trend STRENGTH, not direction. High ADX = a real trend worth
+    trusting momentum/breakout signals on. Low ADX = choppy/sideways, where
+    those same signals are much less reliable."""
+    high, low, close = candles["high"], candles["low"], candles["close"]
+    n = len(close)
+    plus_dm = [0.0] * n
+    minus_dm = [0.0] * n
+    tr = [0.0] * n
+    for i in range(n):
+        if i == 0:
+            tr[i] = float(high[i]) - float(low[i])
+            continue
+        up_move = float(high[i]) - float(high[i - 1])
+        down_move = float(low[i - 1]) - float(low[i])
+        plus_dm[i] = up_move if (up_move > down_move and up_move > 0) else 0.0
+        minus_dm[i] = down_move if (down_move > up_move and down_move > 0) else 0.0
+        h, l, pc = float(high[i]), float(low[i]), float(close[i - 1])
+        tr[i] = max(h - l, abs(h - pc), abs(l - pc))
+    atr_s = _wilder(tr, period)
+    plus_dm_s = _wilder(plus_dm, period)
+    minus_dm_s = _wilder(minus_dm, period)
+    plus_di, minus_di, dx = [], [], []
+    for a, pdm, mdm in zip(atr_s, plus_dm_s, minus_dm_s):
+        if _isnan(a) or a == 0:
+            plus_di.append(NAN); minus_di.append(NAN); dx.append(NAN)
+            continue
+        pdi = 100.0 * pdm / a
+        mdi = 100.0 * mdm / a
+        plus_di.append(pdi); minus_di.append(mdi)
+        denom = pdi + mdi
+        dx.append(0.0 if denom == 0 else 100.0 * abs(pdi - mdi) / denom)
+    adx_line = _wilder(dx, period)
+    return adx_line, plus_di, minus_di
+
+
 def add_indicators(candles):
     """Return a NEW candle dict (columns copied) with every indicator attached."""
     out = {k: list(v) for k, v in candles.items()}
@@ -181,4 +218,8 @@ def add_indicators(candles):
     up, mid, low = bollinger(close, 20, 2.0)
     out["bb_upper"], out["bb_mid"], out["bb_lower"] = up, mid, low
     out["vol_sma20"] = sma(out["volume"], 20)
+    adx_line, plus_di, minus_di = adx(out, 14)
+    out["adx"] = adx_line
+    out["plus_di"] = plus_di
+    out["minus_di"] = minus_di
     return out

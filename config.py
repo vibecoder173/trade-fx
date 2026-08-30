@@ -149,3 +149,6 @@ DISCLAIMER = (
     "and probabilities, never guarantees. Crypto is volatile and you can lose "
     "money. Never risk more than you can afford to lose. Always use a stop-loss."
 )
+
+# Minimum ADX to treat a trend as strong enough to fully trust (else discounted)
+ADX_TREND_THRESHOLD = 20
