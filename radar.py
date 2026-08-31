@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 import requests
 
 import config
+import impact
 
 try:
     import feedparser
@@ -254,10 +255,12 @@ def collect_events(extra_x_handles=None):
     if src.get("exchange_listings"):
         events += poll_exchange_listings()
     if src.get("news"):
-        events += poll_news()
+        min_impact = getattr(config, "RADAR_MIN_IMPACT", 2)
+        events += [e for e in poll_news() if impact.impact_score(e["text"]) >= min_impact]
     if src.get("x"):
         handles = list(config.X_HANDLES) + list(extra_x_handles or [])
-        events += poll_x(handles)
+        min_impact = getattr(config, "RADAR_MIN_IMPACT", 2)
+        events += [e for e in poll_x(handles) if impact.impact_score(e["text"]) >= min_impact]
 
     # De-dup by id, keep newest.
     seen = {}

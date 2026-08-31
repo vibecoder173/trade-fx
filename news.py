@@ -11,6 +11,7 @@ Used two ways:
 
 import time
 import config
+import impact
 
 try:
     import feedparser
@@ -75,15 +76,23 @@ def _keywords_for(watchlist):
     return words
 
 
-def filter_relevant(headlines, watchlist):
-    """Keep headlines mentioning a watched coin or a market-moving keyword."""
+def filter_relevant(headlines, watchlist, min_impact=None):
+    """Keep headlines that (a) mention a watched coin/keyword AND (b) score as
+    actually market-moving - not just any article that says "bitcoin"."""
+    min_impact = config.NEWS_MIN_IMPACT if min_impact is None else min_impact
     words = _keywords_for(watchlist)
     out = []
     for h in headlines:
         title = h["title"].lower()
         hit = next((w for w in words if w in title), None)
-        if hit:
-            h = dict(h)
-            h["matched"] = hit
-            out.append(h)
+        if not hit:
+            continue
+        score = impact.impact_score(h["title"])
+        if score < min_impact:
+            continue
+        h = dict(h)
+        h["matched"] = hit
+        h["impact_score"] = score
+        out.append(h)
+    out.sort(key=lambda x: x["impact_score"], reverse=True)
     return out
