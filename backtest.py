@@ -138,7 +138,8 @@ def _get_history(coin, timeframe, candles):
 
 
 def run_backtest(coin, timeframe=None, account=1000.0, risk_pct=1.0,
-                  rr=2.0, min_score=4, candles=None):
+                  rr=2.0, min_score=4, candles=None,
+                  fee_pct=None, slippage_pct=None):
     """
     Walk-forward backtest of the live strategy. Returns a dict with the
     trade log and summary metrics. Raises ValueError if there isn't enough
@@ -146,6 +147,10 @@ def run_backtest(coin, timeframe=None, account=1000.0, risk_pct=1.0,
     """
     timeframe = timeframe or config.DEFAULT_TIMEFRAME
     candles = candles or DEFAULT_CANDLES
+    fee_pct = getattr(config, "BACKTEST_FEE_PCT", 0.1) if fee_pct is None else fee_pct
+    slippage_pct = (getattr(config, "BACKTEST_SLIPPAGE_PCT", 0.05)
+                     if slippage_pct is None else slippage_pct)
+    round_trip_cost_pct = (fee_pct * 2 + slippage_pct * 2) / 100.0
     raw, source_note = _get_history(coin, timeframe, candles)
     if not raw:
         raise ValueError(f"Couldn't fetch history for {coin.upper()} on {timeframe}.")
@@ -188,6 +193,10 @@ def run_backtest(coin, timeframe=None, account=1000.0, risk_pct=1.0,
                 else:
                     r_mult = (open_trade["entry"] - exit_price) / open_trade["per_unit_risk"]
                 pnl = r_mult * open_trade["risk_amount"]
+                # Fees + slippage, charged on both entry and exit, on the full
+                # position notional - not just the risked amount.
+                cost = open_trade["notional"] * round_trip_cost_pct
+                pnl -= cost
                 equity += pnl
                 trades.append({
                     **open_trade,
@@ -257,6 +266,7 @@ def run_backtest(coin, timeframe=None, account=1000.0, risk_pct=1.0,
             "tp": plan["tp"],
             "per_unit_risk": plan["per_unit_risk"],
             "risk_amount": plan["risk_amount"],
+            "notional": plan["notional"],
             "entry_idx": i,
             "score": net,
         }
@@ -266,6 +276,8 @@ def run_backtest(coin, timeframe=None, account=1000.0, risk_pct=1.0,
         "coin": coin.upper(),
         "timeframe": timeframe,
         "candles_used": n,
+        "fee_pct": fee_pct,
+        "slippage_pct": slippage_pct,
         "source": source_note,
         "start_ts": c["open_time"][0],
         "end_ts": c["open_time"][-1],
@@ -336,6 +348,8 @@ def format_backtest(result):
         f"<b>📊 Backtest — {_html.escape(result['coin'])}/USDT · {_html.escape(result['timeframe'])}</b>",
         f"<i>{result['candles_used']} candles"
         + (f" via {_html.escape(result['source'])}" if result.get("source") else "") + "</i>",
+        f"<i>Fees modeled: {result.get('fee_pct', 0):.2f}% + "
+        f"{result.get('slippage_pct', 0):.2f}% slippage, round-trip</i>",
         "",
     ]
     if m.get("trades", 0) == 0:

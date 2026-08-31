@@ -158,3 +158,6 @@ MAX_RISK_PCT = 3.0
 
 NEWS_MIN_IMPACT = 2
 RADAR_MIN_IMPACT = 2
+
+BACKTEST_FEE_PCT = 0.1       # exchange fee % per side (0.1 = 0.1%, typical spot taker fee)
+BACKTEST_SLIPPAGE_PCT = 0.05  # extra % lost to slippage per side
